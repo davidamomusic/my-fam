@@ -1,0 +1,5 @@
+build/
+fam/build/
+dist/
+__pycache__/
+*.flash

@@ -1,0 +1,112 @@
+# The Miyoo front end: fam/build/miyoo/fm-fam_test miyoo/tests/basic.txt OUTDIR (python3 tools/build.py fam --miyoo-test)
+wait 800
+expect pit2 12
+expect mode 0
+shot m_start.png
+# the key cursor: L2 + RIGHT twice, then A plays (taps) step 3
+down L2
+tap RIGHT
+tap RIGHT
+expect cursor 2
+shot m_keys.png
+tap A
+up L2
+wait 60
+expect sel 2
+# step 3 held (B latches it), the knobs edit it: Y = K1 pitch, one click (quick clicks accelerate, as on the FM-1),
+# X = K2 velocity (UP/DOWN: 4 clicks)
+down L2
+tap B
+up L2
+expect latched 4
+down Y
+tap RIGHT
+up Y
+wait 400
+down X
+tap DOWN
+tap DOWN
+tap LEFT
+tap LEFT
+up X
+down L2
+tap B
+up L2
+expect latched -1
+wait 80
+expect pit2 13
+shot m_step.png
+# ALGORITHM walks the steps, SELECT the pages
+tap RIGHT
+expect sel 3
+tap DOWN
+expect page 1
+tap UP
+expect page 0
+# SELECT + RIGHT: EDIT (synth)
+down SELECT
+tap RIGHT
+up SELECT
+wait 100
+expect mode 1
+shot m_synth.png
+# START plays
+wav m_play.wav
+down SELECT
+tap UP
+up SELECT
+tap START
+wait 2000
+expect running 1
+shot m_run.png
+tap START
+wait 300
+expect running 0
+wavend
+# MENU: help; RIGHT there: MASTER; MENU closes
+tap MENU
+expect help 1
+shot m_help.png
+tap RIGHT
+expect master 85
+tap MENU
+expect help 0
+wait 3000
+save
+wait 200
+# the side panel in each layer
+down SELECT
+shot m_modes.png
+up SELECT
+down L2
+tap UP
+expect cursor 102
+shot m_keys2.png
+tap DOWN
+up L2
+# SYS (SELECT + L1): the system page
+down SELECT
+tap L1
+up SELECT
+wait 2500
+expect mode 9
+shot m_system.png
+tap DOWN
+expect page 0
+# GLO (PATTERNS) has its four pages again
+down SELECT
+tap B
+up SELECT
+wait 100
+tap DOWN
+tap DOWN
+tap DOWN
+tap DOWN
+expect page 3
+# SELECT: KICK in the panel; L1 and R1 do nothing there now
+down SELECT
+shot m_modes2.png
+tap R1
+up SELECT
+wait 100
+expect mode 5

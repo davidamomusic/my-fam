@@ -1,0 +1,7 @@
+{
+"label":"My-FAM",
+"icon":"icon.png",
+"iconsel":"icon.png",
+"launch":"launch.sh",
+"description":"Drum synth and 16-step sequencer, by David Amo"
+}
