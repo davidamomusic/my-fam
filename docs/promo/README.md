@@ -1,6 +1,6 @@
 # The promo video
 
-How `MY-FAM_promo_youtube_16x9.mp4` and `MY-FAM_promo_reel_9x16.mp4` (in the v16 release) were made.
+How `MY-FAM_promo_youtube_16x9.mp4` and `MY-FAM_promo_reel_9x16.mp4` (next to this file) were made.
 
 1. `make_script.py` writes `app_script.txt`: a script for the test runner with the demo's button presses at their
    times and a screenshot every 1/30 s. Run it in `docs/promo/frames/` with the runner
