@@ -8,7 +8,9 @@ Other systems for the console (OnionOS and others) are not supported yet.
 ![SEQ](docs/screens/seq.png) ![SYNTH](docs/screens/synth.png)
 ![KICK](docs/screens/kick.png) ![PATTERNS](docs/screens/patterns.png)
 
-Promo video: [YouTube 16:9](docs/promo/MY-FAM_promo_youtube_16x9.mp4) · [Instagram reel 9:16](docs/promo/MY-FAM_promo_reel_9x16.mp4)
+**Get it on Gumroad (pay what you want): [davidamo.gumroad.com/l/my-fam](https://davidamo.gumroad.com/l/my-fam)**
+
+Promo video: [YouTube](https://youtu.be/aYvvfblMpzU) · [16:9 file](docs/promo/MY-FAM_promo_youtube_16x9.mp4) · [Instagram reel 9:16](docs/promo/MY-FAM_promo_reel_9x16.mp4)
 
 > [!WARNING]
 > Beta software (MY-FAM v16). Provided "as is", without warranty of any kind (MPL-2.0, sections 6 and 7).
@@ -27,7 +29,8 @@ Promo video: [YouTube 16:9](docs/promo/MY-FAM_promo_youtube_16x9.mp4) · [Instag
 
 ## Install
 
-1. Download [`releases/MY-FAM-v16.zip`](releases/MY-FAM-v16.zip) and unzip it.
+1. Download MY-FAM from [Gumroad](https://davidamo.gumroad.com/l/my-fam) (pay what you want, also free)
+   or [`releases/MY-FAM-v16.zip`](releases/MY-FAM-v16.zip) here, and unzip it.
 2. Copy the folder `Apps/MY-FAM.pak` to `/mnt/SDCARD/Apps/` on the SD card.
 3. Start **MY-FAM** from Apps in Allium.
 
