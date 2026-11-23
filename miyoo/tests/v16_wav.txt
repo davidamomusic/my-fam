@@ -1,0 +1,36 @@
+# WAV export (run with MYFAM_WAV_ROOT=OUTDIR): R2 + X opens the folder picker, NEW FOLDER, START saves there
+wait 100
+down R2
+tap X
+up R2
+expect pick 1
+shot m_pick.png
+tap DOWN
+tap A
+expect pick 1
+shot m_pick_new.png
+tap START
+expect pick 0
+expect exporting 1
+wait 500
+shot m_exporting.png
+wait 6000
+expect exporting 0
+# the default pattern: 8 synth steps, 16 kick steps -> 2 bars of 8 at 118 BPM (2.03 s) + 2 s of tail
+expect wavtenths 40
+shot m_saved.png
+# the song with no slots: nothing is written
+down R2
+tap A
+up R2
+expect pick 1
+tap START
+expect pick 0
+expect exporting 0
+# MENU closes the picker without exporting
+down R2
+tap X
+up R2
+tap MENU
+expect pick 0
+expect exporting 0

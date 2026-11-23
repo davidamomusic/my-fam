@@ -1,5 +1,5 @@
 #!/bin/sh
-# My-FAM by David Amo: build for the Miyoo Mini Plus and package My-FAM-vN.zip (Apps/My-FAM.pak).
+# MY-FAM by David Amo: build for the Miyoo Mini Plus and package MY-FAM-vN.zip (Apps/MY-FAM.pak).
 #
 #   TOOLCHAIN=/path/to/gcc-linaro-arm-linux-gnueabihf-raspbian-x64 \
 #   SDL_INCLUDE=/path/to/include  SDL_LIB=/path/to/libSDL-1.2.so.0  miyoo/package.sh
@@ -18,7 +18,11 @@ V=$(sed -n 's/^#define MYFAM_VERSION "\([0-9]*\)".*/\1/p' fam/app.h)
 # the tests first, on this machine
 python3 tools/build.py fam --miyoo-test
 T=$(mktemp -d)
-(cd "$T" && "$ROOT/fam/build/miyoo/my-fam_test" "$ROOT/miyoo/tests/basic.txt" "$T" | grep -v '^said')
+for t in miyoo/tests/*.txt; do   # (each from a fresh start: no save file; WAVs into the temporary folder)
+    rm -rf "$T/run" && mkdir -p "$T/run"
+    (cd "$T/run" && MYFAM_WAV_ROOT="$T/run" "$ROOT/fam/build/miyoo/my-fam_test" "$ROOT/$t" "$T/run" | grep -v '^said\|^my-fam:' | tail -1) | tee "$T/result"
+    grep -q ' 0 failure' "$T/result" || { echo "package: $t failed" >&2; exit 1; }
+done
 
 # the app
 CC="$B-gcc" \
@@ -31,7 +35,7 @@ if "$B-objdump" -T fam/build/miyoo/my-fam | grep -q 'GLIBC_2\.[5-9]\|GLIBC_2\.[1
 fi
 
 # the package
-D="$T/dist/Apps/My-FAM.pak"
+D="$T/dist/Apps/MY-FAM.pak"
 mkdir -p "$D"
 cp fam/build/miyoo/my-fam "$D/my-fam.elf"
 "$B-strip" "$D/my-fam.elf"
@@ -42,7 +46,7 @@ cp assets/fonts/Barlow-OFL.txt assets/fonts/Terminus-LICENSE.txt "$D/"
 chmod +x "$D/my-fam.elf" "$D/launch.sh"
 (cd "$D" && md5sum my-fam.elf > my-fam.md5)
 mkdir -p dist
-rm -f "dist/My-FAM-v$V.zip"
-(cd "$T/dist" && zip -qr "$ROOT/dist/My-FAM-v$V.zip" Apps)
+rm -f "dist/MY-FAM-v$V.zip"
+(cd "$T/dist" && zip -qr "$ROOT/dist/MY-FAM-v$V.zip" Apps)
 rm -rf "$T"
-echo "package: dist/My-FAM-v$V.zip"
+echo "package: dist/MY-FAM-v$V.zip"

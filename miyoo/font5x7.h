@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* Copyright (C) 2026 David Amo. My-FAM. */
+/* Copyright (C) 2026 David Amo. MY-FAM. */
 /* A 5x7 pixel font for the Miyoo front end's side panel and help (ASCII 32..95, lower case drawn as upper case).
  * Each glyph: its character, then 7 rows of 5 columns ('#' lit). Codes 1..4 are the arrows up, down, left, right. */
 #pragma once

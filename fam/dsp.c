@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* Copyright (C) 2026 David Amo. My-FAM. */
-/* My-FAM: the sound engine. One synth voice (two oscillators of 16 types with sync and FM, noise, a filter that is a
+/* Copyright (C) 2026 David Amo. MY-FAM. */
+/* MY-FAM: the sound engine. One synth voice (two oscillators of 16 types with sync and FM, noise, a filter that is a
  * 4-pole ladder or a state-variable one, three envelopes, a patch bay), a drum synth voice, and the effects chain
  * (compressor, stutter, DJ filter, delay, reverb, limiter). Float DSP: the FM-1's chip has a single-precision FPU, no doubles. */
 #include <stdint.h>

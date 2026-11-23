@@ -3,3 +3,7 @@ fam/build/
 dist/
 __pycache__/
 *.flash
+fam/web/
+docs/promo/frames/
+docs/promo/*.mp4
+docs/promo/miyoo.jpg

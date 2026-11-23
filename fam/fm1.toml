@@ -1,7 +1,7 @@
-name = "My-FAM"
+name = "MY-FAM"
 id_prefix = "FM-1_77"            # plain dev builds only: release.sh sets the real identity (FM1B_ID, FM-1_111)
 usb_manufacturer = "David Amo"
-usb_product = "My-FAM"
+usb_product = "MY-FAM"
 o2 = ["dsp.c"]
 mirror = true
 midi_stamp = true                # MIDI in stamped where it lands: the clock sync places each step by it

@@ -1,0 +1,29 @@
+# Pattern navigation with SHIFT, from any screen; no destructive pattern command.
+wait 200
+expect pat 0
+down R2
+tap RIGHT
+up R2
+wait 100
+expect pat 1
+down R2
+tap LEFT
+up R2
+wait 100
+expect pat 0
+down R2
+tap UP
+up R2
+wait 100
+expect pat 16
+down R2
+tap DOWN
+up R2
+wait 100
+expect pat 0
+# Random page remains reachable.
+down R2
+tap Y
+up R2
+wait 100
+expect mode 6

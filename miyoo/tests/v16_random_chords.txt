@@ -1,0 +1,15 @@
+# Four dedicated random scopes; no octave changes, one action per press.
+wait 100
+down L1
+down R1
+tap A
+wait 30
+tap B
+wait 30
+tap Y
+wait 30
+tap X
+up R1
+up L1
+wait 50
+expect mode 0

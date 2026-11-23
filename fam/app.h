@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* Copyright (C) 2026 David Amo. My-FAM. */
-/* My-FAM: a drum synth and sequencer (for the Miyoo Mini Plus; it began as a firmware for the M-VAVE FM-1). */
+/* Copyright (C) 2026 David Amo. MY-FAM. */
+/* MY-FAM: a drum synth and sequencer (for the Miyoo Mini Plus; it began as a firmware for the M-VAVE FM-1). */
 #pragma once
 #include <stdint.h>
 #include "plat.h"
 
-#ifdef MYFAM                             /* the Miyoo build: My-FAM by David Amo, one number per version */
+#ifdef MYFAM                             /* the Miyoo build: MY-FAM by David Amo, one number per version */
 #define APP_NAME "MY-FAM"
-#define MYFAM_VERSION "15"
+#define MYFAM_VERSION "16"
 #else
 #define APP_NAME "MY-FAM"
 #endif
@@ -24,13 +24,18 @@ void app_init(void);
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12);
 #define APP_TICK                         /* 1 kHz: the MIDI clock out leaves on time */
 void app_tick(void);
-#define APP_LINE_OUT                     /* My-FAM's addition to the platform: the block on its way to the FM-1's own output */
+#define APP_LINE_OUT                     /* MY-FAM's addition to the platform: the block on its way to the FM-1's own output */
 void app_line_out(int32_t *lr, uint32_t n);
 #define APP_WEB                          /* the browser pages' own exports (fam/web.c): Render Audio */
 void app_panic(void);
 void app_ui_init(void);
 void app_frame(void);
 void app_input_only(void);
+void app_miyoo_pattern_step(int delta);   /* (MY-FAM on the Miyoo: miyoo/myfam_miyoo.c) */
+void app_miyoo_random(int scope);
+int app_miyoo_export_start(int song);
+int app_miyoo_export_complete(void);
+void app_miyoo_export_finish(void);
 void app_say(const char *a, const char *b);
 
 /* backup and restore over USB (fm1.toml backup = true; the mirror page's Projects panel and tools/fm1_backup.py): the

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* My-FAM's own exports for its browser pages (app.h APP_WEB): fm1-base's web/emu/emu_web.c takes this in after the
+/* MY-FAM's own exports for its browser pages (app.h APP_WEB): fm1-base's web/emu/emu_web.c takes this in after the
  * whole app (host/plat_host.c, app.c), so it reaches the app's own state. Render Audio (fam/web/emu/render.js, on the
  * player and the mirror page) runs a copy of the app in a worker (render_worker.js): it chooses a pattern, what is
  * heard, and how many 16ths, then asks for audio (web_render) until the sequencer stops by itself. Never on the FM-1. */

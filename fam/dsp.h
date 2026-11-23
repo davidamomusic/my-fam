@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* Copyright (C) 2026 David Amo. My-FAM. */
-/* My-FAM: the sound engine (a two-oscillator voice, a drum synth, the effects). Float, 44.1 kHz. */
+/* Copyright (C) 2026 David Amo. MY-FAM. */
+/* MY-FAM: the sound engine (a two-oscillator voice, a drum synth, the effects). Float, 44.1 kHz. */
 #pragma once
 #include <stdint.h>
 

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* Copyright (C) 2026 David Amo. My-FAM. */
-/* My-FAM: the sequencer, the controls and the screen. The sound is in dsp.c. Part of the unity build, after the
+/* Copyright (C) 2026 David Amo. MY-FAM. */
+/* MY-FAM: the sequencer, the controls and the screen. The sound is in dsp.c. Part of the unity build, after the
  * platform: gfx.c (cv_*, fonts, colours) is in scope. */
 #include <stddef.h>
 #include "fastmath.h"
@@ -816,10 +816,16 @@ static void ratchet_hit(void)
     sq.trigs++;
 }
 
+/* Miyoo WAV export (app_miyoo_export_*): how many bars to render, and whether they are done */
+static int miyoo_export_active, miyoo_export_bars, miyoo_export_done;
 static void seq_step(void)
 {
     uint32_t s = (uint32_t)sq.step + 1u, len = pats[sq.cur].len, ks;
     uint8_t old = sq.cur;
+    if (s >= len && miyoo_export_active && sq.bar + 1u >= (uint32_t)miyoo_export_bars) {
+        miyoo_export_done = 1;           /* (exporting: the last bar is over; nothing more starts, the tails ring on) */
+        return;
+    }
     if (s >= len) {                      /* a new bar: the queued pattern or the song's next */
         s = 0;
         sq.bar++;
@@ -1730,7 +1736,7 @@ void app_backup_restored(void)           /* the flash holds the restored set: lo
  * quadrants, one for each of the knobs K1..K4. */
 enum { M_SEQ, M_SYN, M_PATCH, M_KICK, M_FX, M_PATT, M_RAND, M_SCALE, M_HOME, M_SET, NMODE };
 enum { SP_AUDIO, SP_MIDI, SP_MIDI2, SP_BT, SP_VER, NSP };  /* ENV's pages (M_SET), in the order they come */
-#ifdef MYFAM                             /* My-FAM (the Miyoo): ENV's mode is SYS, one page: the CPU, memory and threads */
+#ifdef MYFAM                             /* MY-FAM (the Miyoo): ENV's mode is SYS, one page: the CPU, memory and threads */
 #define SET_NPAGE 1
 void myfam_diag_vis(void);
 void myfam_diag_cells(void *c);          /* (the footer's four cells: an fcell_t[4]) */
@@ -2486,6 +2492,27 @@ static void random_flavour(int kind)
     (void)n;
     touch();
     dirty_all();
+}
+
+/* Miyoo-specific direct random commands. They reuse the original random
+ * pages, probabilities and persistence, without synthesizing REC/OCT keys. */
+void app_miyoo_random(int scope)
+{
+    int n = 0;
+    rnd_hat = (int)(rnd() % 100u) < 15;
+    if (scope == 0) { /* SOUND: synth and kick sound pages, no steps */
+        for (int rp = 2; rp <= 7; rp++) n += rnd_page(rp);
+        for (int rp = 9; rp <= 11; rp++) n += rnd_page(rp);
+        publish(); app_say("RANDOM", n ? "SOUND" : "SOUND OFF");
+    } else if (scope == 1) { /* STEPS: synth and kick sequences */
+        n += rnd_page(0); n += rnd_page(1); n += rnd_page(12);
+        publish(); app_say("RANDOM", n ? "STEPS" : "STEPS OFF");
+    } else if (scope == 2) {
+        random_run(0); return;
+    } else {
+        random_run(2); return;
+    }
+    touch(); dirty_all();
 }
 
 /* OCT+ + HOME: a random for percussion between the mids and the lows. The steps and the kick are drawn as the
@@ -3566,6 +3593,62 @@ static void set_knob(uint32_t kn, int32_t e)    /* ENV's pages */
     else if (pg() == SP_BT)
         bt_knob(kn, e);
 }
+/* Miyoo SHIFT + D-pad: navigate patterns without entering a destructive
+ * PATTERNS command. The original queue/switch behavior is retained. */
+void app_miyoo_pattern_step(int delta)
+{
+    int current = sq.queued >= 0 ? sq.queued : sq.cur;
+    int next = clamp(current + delta, 0, NPAT - 1);
+    uint8_t command = ui.cmd;
+    ui.cmd = 0;
+    pick_pattern(next);
+    ui.cmd = command;
+    ui.bank = (uint8_t)(next / NPB);
+    ui.d_vis = ui.d_foot = ui.d_strip = 1;
+}
+
+/* Miyoo WAV export: render the existing sequencer from its first step.
+ * The front end writes the generated stereo samples; no microphone involved.
+ * A pattern: until its synth and kick sequences line up again (the least common multiple of their lengths, at most
+ * 16 bars). The song: one bar for each populated slot. */
+static uint8_t miyoo_export_old_song;
+static uint32_t gcd_u(uint32_t a, uint32_t b) { while (b) { uint32_t t = a % b; a = b; b = t; } return a ? a : 1u; }
+int app_miyoo_export_start(int song)
+{
+    if (miyoo_export_active) return 0;
+    miyoo_export_old_song = sd.song_on;
+    miyoo_export_bars = 0;
+    if (song) {
+        for (int i = 0; i < 32; i++)
+            if (sd.song[i] < NPAT) miyoo_export_bars++;
+        if (!miyoo_export_bars) return 0;
+        sd.song_on = 1;
+    } else {
+        uint32_t l = pats[sq.queued >= 0 ? sq.queued : sq.cur].len, k = pats[sq.queued >= 0 ? sq.queued : sq.cur].klen;
+        uint32_t steps = l / gcd_u(l, k) * k;
+        sd.song_on = 0;
+        miyoo_export_bars = (int)clamp((int32_t)(steps / l), 1, 16);
+    }
+    seq_stop();
+    seq_start();
+    miyoo_export_done = 0;
+    miyoo_export_active = 1;
+    return 1;
+}
+int app_miyoo_export_complete(void)
+{
+    return !miyoo_export_active || miyoo_export_done;
+}
+void app_miyoo_export_finish(void)
+{
+    if (!miyoo_export_active) return;
+    seq_stop();
+    sd.song_on = miyoo_export_old_song;
+    miyoo_export_active = 0;
+    miyoo_export_done = 0;
+    ui.d_vis = ui.d_foot = 1;
+}
+
 static void patt_knob(uint32_t kn, int32_t e)   /* PATTERNS: pick, command, bank, song / SONG: slot, pattern, clear, song / presets / Bluetooth */
 {
     if (pg() == 0) {
@@ -3897,7 +3980,7 @@ static void input(void)
             patt_knob(k, e);
         else if (ui.mode == M_SET) {
 #ifndef MYFAM
-            set_knob(k, e);              /* (My-FAM's SYS: nothing to turn) */
+            set_knob(k, e);              /* (MY-FAM's SYS: nothing to turn) */
 #endif
         }
         else if (ui.mode == M_RAND)

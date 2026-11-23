@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* Copyright (C) 2026 David Amo. My-FAM. */
-/* My-FAM (by David Amo), on the Miyoo Mini Plus: the host simulator (host/plat_host.c, by way of host/rfm1.c's real-time entry points)
+/* Copyright (C) 2026 David Amo. MY-FAM. */
+/* MY-FAM (by David Amo), on the Miyoo Mini Plus: the host simulator (host/plat_host.c, by way of host/rfm1.c's real-time entry points)
  * with the handheld's buttons, screen and sound in place of the FM-1's panel.
  *
  *   python3 tools/build.py fam --miyoo      ->  fam/build/miyoo/fm-fam      (CC, MIYOO_CFLAGS, MIYOO_LIBS)
@@ -9,17 +9,18 @@
  * layer that is active, the lights of the mode buttons and the keys, and the key cursor.
  *
  * The controls (layers: what a button does is decided when it goes down, so OCT- held before SELECT stays OCT-):
- *   BASE    Y X A B held + D-pad: knobs K1 K2 K3 K4 (right/up +, left/down -; up/down 4 clicks at a time)
+ *   BASE    L1+R1+A/B/Y/X: RANDOM SOUND/STEPS/PAGE/ALL; Y X A B held + D-pad: knobs K1 K2 K3 K4 (right/up +, left/down -; up/down 4 clicks at a time)
  *           D-pad alone: left/right ALGORITHM, up/down SELECT (page)
- *           START PLAY   L1 OCT-   R1 OCT+   R2 REC
+ *           START PLAY   L1/R1 random modifiers   R2 SHIFT
  *   MODES   SELECT held: up SEQ, right EDIT, down KICK, left LFO, X SCL, A FX, B PATTERNS, Y SAVE, L1 SYS,
  *           L2 / R2 PRESETS - / +
+ *   SHIFT   R2 held: LEFT/RIGHT pattern -/+, DOWN/UP bank -/+, Y RANDOM, B clears latched step, X/A WAV pattern/song.
  *   KEYS    L2 held: D-pad moves the key cursor (left/right along a row, up the black keys, down the white keys),
  *           A plays the key while held, X taps it and moves on, B holds it (latched) until B again
  *   MENU    help (START there quits, saving; left/right: MASTER)
  *
  * The clock: the sound card's. The main loop runs the simulator one millisecond at a time while the audio ring has
- * room (rfm1.c's contract: tick, then frame every 16 ms or idle, then the audio that fell due), so My-FAM's time
+ * room (rfm1.c's contract: tick, then frame every 16 ms or idle, then the audio that fell due), so MY-FAM's time
  * is the sound's. Saved data: the 1 MiB flash image, in a file (MYFAM_SAVE, default ./my-fam.flash), written by a
  * thread of its own a little after the app last changed it, and on the way out.
  *
@@ -27,12 +28,14 @@
  * button presses, screenshots and a WAV: miyoo/tests). */
 #define export_name(x) unused           /* (rfm1.c's WebAssembly exports: plain functions here) */
 #include "rfm1.c"
-#undef getenv                           /* (rfm1.c hides the environment from a host app: My-FAM reads its own) */
+#undef getenv                           /* (rfm1.c hides the environment from a host app: MY-FAM reads its own) */
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
 #include "font5x7.h"
 #include <dirent.h>
+#include <sys/stat.h>
+#include <strings.h>
 #include <sys/syscall.h>
 
 /* ------------------------------------------------------------ threads --- */
@@ -89,7 +92,7 @@ static const char *const MB_NAMES[MB_N] = {"UP", "DOWN", "LEFT", "RIGHT", "A", "
 
 /* what a button does while it is down: an FM-1 button (label), a key, an encoder's clicks, or the front end's own */
 enum { ACT_NONE, ACT_BTN, ACT_KEY, ACT_ENC, ACT_KNOB, ACT_CURSOR, ACT_KEYTAP, ACT_LATCH, ACT_HELP, ACT_QUIT, ACT_MASTER,
-       ACT_IGNORE };
+       ACT_IGNORE, ACT_PATTERN, ACT_RANDOM, ACT_EXPORT };
 typedef struct {
     uint8_t act, arg;                   /* ACT_BTN: label; ACT_KEY: key; ACT_ENC: role; ACT_KNOB: face (0..3: K1..K4) */
     int8_t dir;                         /* clicks a step */
@@ -162,6 +165,8 @@ static void role_step(int b)
         knob_flash_ms[r->arg] = g_ms ? g_ms : 1;
     } else if (r->act == ACT_CURSOR)
         cursor_move(r->arg);
+    else if (r->act == ACT_PATTERN)
+        app_miyoo_pattern_step(r->dir);
     else if (r->act == ACT_MASTER) {
         master_pct = clamp(master_pct + r->dir, 0, 100);
         rf_panel.master = master_pct * 1023 / 100;
@@ -178,6 +183,213 @@ static int face_knob(void)              /* the knob of the face button held firs
     return best;
 }
 
+/* The WAV writer is driven by the same 44.1 kHz audio frames as the speaker.
+ * A finite pattern/song pass is recorded, followed by a two-second FX tail. */
+static const char *save_path = "my-fam.flash";
+static FILE *export_wav;
+/* where the last WAV went: the message in the side panel ("SAVED ..." for 4 s, "NO SONG" when there is nothing) */
+static char export_msg[64];
+static uint32_t export_msg_ms;
+static char export_last[160];
+static void export_note(const char *m)
+{
+    snprintf(export_msg, sizeof export_msg, "%s", m);
+    export_msg_ms = g_ms ? g_ms : 1;
+}
+static uint32_t export_frames, export_tail;
+static int export_done_seq;
+static void export_header(FILE *f, uint32_t frames)
+{
+    uint8_t h[44] = { 'R','I','F','F',0,0,0,0,'W','A','V','E','f','m','t',' ',
+        16,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,4,0,16,0,
+        'd','a','t','a',0,0,0,0 };
+    uint32_t rate = RATE, bytes = frames * 4u, riff = bytes + 36u;
+    for (int i = 0; i < 4; i++) {
+        h[4+i] = (uint8_t)(riff >> (8*i));
+        h[24+i] = (uint8_t)(rate >> (8*i));
+        h[28+i] = (uint8_t)((rate*4u) >> (8*i));
+        h[40+i] = (uint8_t)(bytes >> (8*i));
+    }
+    fseek(f, 0, SEEK_SET);
+    fwrite(h, 1, sizeof h, f);
+}
+static void export_close(void)
+{
+    if (!export_wav) return;
+    export_header(export_wav, export_frames);
+    fclose(export_wav);
+    export_wav = NULL;
+    app_miyoo_export_finish();
+    fprintf(stderr, "my-fam: saved %s (%.1f s)\n", export_last, export_frames / (double)RATE);
+    export_note("SAVED");
+}
+static void export_begin(int song, const char *dir)
+{
+    char path[1024];
+    if (export_wav) return;
+    /* the first free name in that folder: my-fam-pattern-001.wav, -002 ... */
+    for (int i = 1; i <= 999; i++) {
+        snprintf(path, sizeof path, "%s/my-fam-%s-%03d.wav", dir, song ? "song" : "pattern", i);
+        if (access(path, F_OK) != 0)
+            break;
+    }
+    if (!(export_wav = fopen(path, "wb+"))) {
+        export_note("CAN'T WRITE");
+        return;
+    }
+    if (!app_miyoo_export_start(song)) {
+        fclose(export_wav); export_wav = NULL; unlink(path);
+        export_note(song ? "NO SONG" : "NOTHING");
+        return;
+    }
+    const char *slash = strrchr(path, '/');
+    snprintf(export_last, sizeof export_last, "%s", slash ? slash + 1 : path);
+    fprintf(stderr, "my-fam: exporting %s\n", path);
+    export_frames = 0; export_tail = 0; export_done_seq = 0;
+    export_header(export_wav, 0);
+}
+
+/* ------------------------------------------------------------ the folder picker (WAV export) --- */
+/* R2 + X (pattern) or R2 + A (song) opens it: the folders under the card, the last one used first. UP / DOWN pick a
+ * line (L1 / R1: a page), A or RIGHT opens a folder or does the line, B or LEFT goes up, START saves here, MENU closes.
+ * The folder used is kept in my-fam.cfg (next to my-fam.flash). */
+#define PK_MAX 200
+static int pick_on, pick_song, pick_sel, pick_top, pick_n;
+static char pick_dir[512], pick_root[512];
+static char pick_name[PK_MAX][64];
+static char cfg_path[600];
+static int name_cmp(const void *a, const void *b) { return strcasecmp((const char *)a, (const char *)b); }
+static void pick_scan(void)
+{
+    DIR *d = opendir(pick_dir);
+    struct dirent *e;
+    pick_n = 0;
+    if (d) {
+        while ((e = readdir(d)) && pick_n < PK_MAX) {
+            char full[1100];
+            struct stat st;
+            if (e->d_name[0] == '.' || strlen(e->d_name) >= sizeof pick_name[0])
+                continue;
+            snprintf(full, sizeof full, "%s/%s", pick_dir, e->d_name);
+            if (stat(full, &st) == 0 && S_ISDIR(st.st_mode))
+                snprintf(pick_name[pick_n++], sizeof pick_name[0], "%s", e->d_name);
+        }
+        closedir(d);
+    }
+    qsort(pick_name, (size_t)pick_n, sizeof pick_name[0], name_cmp);
+    pick_sel = 0, pick_top = 0;
+}
+static int pick_lines(void) { return 2 + (strcmp(pick_dir, pick_root) != 0) + pick_n; }   /* SAVE HERE, NEW FOLDER, .., the folders */
+static int dir_ok(const char *p)
+{
+    struct stat st;
+    return p[0] && stat(p, &st) == 0 && S_ISDIR(st.st_mode);
+}
+static void cfg_save(void)
+{
+    FILE *f = fopen(cfg_path, "w");
+    if (f) {
+        fprintf(f, "wavdir=%s\n", pick_dir);
+        fclose(f);
+    }
+}
+static void pick_open(int song)
+{
+    const char *e = getenv("MYFAM_WAV_ROOT");
+    char dir[512] = "";
+    FILE *f;
+    /* the root: the SD card (or MYFAM_WAV_ROOT, or the app's folder) */
+    if (e && dir_ok(e))
+        snprintf(pick_root, sizeof pick_root, "%s", e);
+    else if (dir_ok("/mnt/SDCARD"))
+        snprintf(pick_root, sizeof pick_root, "/mnt/SDCARD");
+    else if (!getcwd(pick_root, sizeof pick_root))
+        snprintf(pick_root, sizeof pick_root, ".");
+    /* the last folder used, if it is still there and under the root */
+    if ((f = fopen(cfg_path, "r"))) {
+        char line[600];
+        while (fgets(line, sizeof line, f))
+            if (!strncmp(line, "wavdir=", 7)) {
+                line[strcspn(line, "\r\n")] = 0;
+                snprintf(dir, sizeof dir, "%s", line + 7);
+            }
+        fclose(f);
+    }
+    if (!dir_ok(dir) || strncmp(dir, pick_root, strlen(pick_root)) != 0)
+        snprintf(dir, sizeof dir, "%s", pick_root);
+    snprintf(pick_dir, sizeof pick_dir, "%s", dir);
+    pick_song = song;
+    pick_scan();
+    pick_on = 1;
+}
+static void pick_up(void)                /* the folder above, the one we came from picked */
+{
+    char from[64] = "";
+    char *sl;
+    if (!strcmp(pick_dir, pick_root) || !(sl = strrchr(pick_dir, '/')))
+        return;
+    snprintf(from, sizeof from, "%s", sl + 1);
+    *sl = 0;
+    if (!pick_dir[0])
+        snprintf(pick_dir, sizeof pick_dir, "/");
+    pick_scan();
+    for (int i = 0; i < pick_n; i++)
+        if (!strcmp(pick_name[i], from))
+            pick_sel = 2 + (strcmp(pick_dir, pick_root) != 0) + i;
+}
+static void pick_into(const char *name)
+{
+    size_t n = strlen(pick_dir);
+    if (n + 1 + strlen(name) >= sizeof pick_dir)
+        return;
+    snprintf(pick_dir + n, sizeof pick_dir - n, "%s%s", pick_dir[n - 1] == '/' ? "" : "/", name);
+    pick_scan();
+}
+static void pick_do(void)                /* A on a line */
+{
+    int up = strcmp(pick_dir, pick_root) != 0;
+    if (pick_sel == 0) {                 /* SAVE HERE */
+        pick_on = 0;
+        cfg_save();
+        export_begin(pick_song, pick_dir);
+    } else if (pick_sel == 1) {          /* NEW FOLDER: "MY-FAM WAV", "MY-FAM WAV 2" ... and into it */
+        char name[64], full[700];
+        for (int i = 1; i < 100; i++) {
+            if (i == 1)
+                snprintf(name, sizeof name, "MY-FAM WAV");
+            else
+                snprintf(name, sizeof name, "MY-FAM WAV %d", i);
+            snprintf(full, sizeof full, "%s/%s", pick_dir, name);
+            if (access(full, F_OK) != 0)
+                break;
+        }
+        if (mkdir(full, 0777) == 0)
+            pick_into(name);
+    } else if (up && pick_sel == 2)
+        pick_up();
+    else
+        pick_into(pick_name[pick_sel - 2 - up]);
+}
+static void pick_key(int b)
+{
+    int n = pick_lines(), vis = 15;
+    switch (b) {
+    case MB_UP: pick_sel = (pick_sel + n - 1) % n; break;
+    case MB_DOWN: pick_sel = (pick_sel + 1) % n; break;
+    case MB_L1: pick_sel = pick_sel - vis < 0 ? 0 : pick_sel - vis; break;
+    case MB_R1: pick_sel = pick_sel + vis >= n ? n - 1 : pick_sel + vis; break;
+    case MB_A: case MB_RIGHT: pick_do(); break;
+    case MB_B: case MB_LEFT: pick_up(); break;
+    case MB_START: pick_sel = 0; pick_do(); break;
+    case MB_MENU: pick_on = 0; break;
+    default: break;
+    }
+    if (pick_sel < pick_top)
+        pick_top = pick_sel;
+    if (pick_sel >= pick_top + vis)
+        pick_top = pick_sel - vis + 1;
+}
+
 static void mb_down(int b)
 {
     mb_role_t *r = &role[b];
@@ -187,6 +399,15 @@ static void mb_down(int b)
     memset(r, 0, sizeof *r);
     r->down_ms = g_ms;
     r->next_ms = g_ms + 350u;
+    if (pick_on) {                      /* the folder picker has the buttons (MENU + D-pad stays the system's) */
+        if (mb_held & MB(MB_MENU) && b != MB_MENU) {
+            r->act = ACT_IGNORE;
+            return;
+        }
+        r->act = ACT_IGNORE;
+        pick_key(b);
+        return;
+    }
     if (help_on) {                      /* the help: START quits, left/right MASTER, MENU or B closes */
         if (b == MB_START)
             r->act = ACT_QUIT, quit_req = 1;
@@ -223,6 +444,36 @@ static void mb_down(int b)
             r->act = ACT_IGNORE;
         return;
     }
+    /* Two shoulder buttons select the four dedicated random scopes. The
+     * shoulders do not transmit OCT events, so neither octaves nor presets
+     * change when a random chord is prepared. One random per key-down. */
+    if ((mb_held & (MB(MB_L1) | MB(MB_R1))) == (MB(MB_L1) | MB(MB_R1)) &&
+        (b == MB_A || b == MB_B || b == MB_X || b == MB_Y)) {
+        r->act = ACT_RANDOM;
+        app_miyoo_random(b == MB_A ? 0 : b == MB_B ? 1 : b == MB_Y ? 2 : 3);
+        return;
+    }
+    /* SHIFT is intentionally after SELECT: SELECT+R2 remains preset +.
+     * Translate explicit secondary actions into the original FM-FAM REC event;
+     * the synthesis/sequencer engine remains untouched. Other SHIFT chords
+     * are ignored rather than accidentally modifying a parameter. */
+    if ((mb_held & MB(MB_R2)) && b != MB_R2) {
+        if (b == MB_X || b == MB_A) {
+            r->act = ACT_EXPORT;
+            if (!export_wav)
+                pick_open(b == MB_A);
+        } else if (b == MB_Y || (b == MB_B && latched >= 0)) {
+            r->act = ACT_BTN, r->arg = B_REC;
+            btn_set(B_REC, 1);
+        } else if (dpad) {
+            /* Left/right: adjacent patterns; up/down: next/previous bank. */
+            r->act = ACT_PATTERN;
+            r->dir = (int8_t)(b == MB_RIGHT ? 1 : b == MB_LEFT ? -1 : b == MB_UP ? 16 : -16);
+            role_step(b);
+        } else
+            r->act = ACT_IGNORE;
+        return;
+    }
     if (mb_held & MB(MB_L2) && b != MB_L2) {           /* KEYS */
         if (dpad) {
             r->act = ACT_CURSOR, r->arg = (uint8_t)b;
@@ -245,9 +496,9 @@ static void mb_down(int b)
 base:
     switch (b) {
     case MB_START: r->act = ACT_BTN, r->arg = B_PLAY; btn_set(B_PLAY, 1); return;
-    case MB_L1: r->act = ACT_BTN, r->arg = B_OCTDN; btn_set(B_OCTDN, 1); return;
-    case MB_R1: r->act = ACT_BTN, r->arg = B_OCTUP; btn_set(B_OCTUP, 1); return;
-    case MB_R2: r->act = ACT_BTN, r->arg = B_REC; btn_set(B_REC, 1); return;
+    case MB_L1: r->act = ACT_NONE; return; /* shoulder random modifier */
+    case MB_R1: r->act = ACT_NONE; return; /* shoulder random modifier */
+    case MB_R2: r->act = ACT_NONE; return; /* SHIFT modifier */
     case MB_SELECT: case MB_L2: r->act = ACT_NONE; return;   /* (the layers' modifiers) */
     default: break;
     }
@@ -281,7 +532,7 @@ static void mb_repeat(void)
 {
     for (int b = 0; b < MB_N; b++) {
         mb_role_t *r = &role[b];
-        if (!(mb_held & MB(b)) || (r->act != ACT_ENC && r->act != ACT_KNOB && r->act != ACT_CURSOR && r->act != ACT_MASTER))
+        if (!(mb_held & MB(b)) || (r->act != ACT_ENC && r->act != ACT_KNOB && r->act != ACT_CURSOR && r->act != ACT_MASTER && r->act != ACT_PATTERN))
             continue;
         while ((int32_t)(g_ms - r->next_ms) >= 0) {
             role_step(b);
@@ -326,7 +577,7 @@ static uint64_t now_us(void)
     clock_gettime(CLOCK_MONOTONIC, &t);
     return (uint64_t)t.tv_sec * 1000000u + (uint64_t)t.tv_nsec / 1000u;
 }
-/* one millisecond of My-FAM: its tick, a frame or idle, the 44.1 frames that fell due */
+/* one millisecond of MY-FAM: its tick, a frame or idle, the 44.1 frames that fell due */
 static double frac;
 static void sim_one_ms(void)
 {
@@ -345,6 +596,22 @@ static void sim_one_ms(void)
     n = (uint32_t)frac;
     frac -= n;
     rf_audio(buf, n);
+    if (export_wav) {
+        if (!export_done_seq && app_miyoo_export_complete()) {
+            export_done_seq = 1;
+            /* Stop triggering new notes while allowing the DSP tails to ring. */
+            app_miyoo_export_finish();
+        }
+        if (fwrite(buf, sizeof(int16_t) * 2u, n, export_wav) != n) {
+            export_close();
+        } else {
+            export_frames += n;
+            if (export_done_seq) {
+                export_tail += n;
+                if (export_tail >= RATE * 2u) export_close();
+            }
+        }
+    }
     t2 = now_us();
     pr_us[PR_APP] += t1 - t0, pr_us[PR_SOUND] += t2 - t1;
     w = __atomic_load_n(&ar_w, __ATOMIC_RELAXED);
@@ -356,7 +623,7 @@ static void sim_one_ms(void)
 }
 
 /* ------------------------------------------------------------ saving --- */
-static const char *save_path = "my-fam.flash";
+
 static uint8_t save_buf[RF_FLASH_SIZE];
 static pthread_mutex_t save_mx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t save_cv = PTHREAD_COND_INITIALIZER;
@@ -754,8 +1021,14 @@ static const char *layer_name(void)
         return "HELP";
     if (mb_held & MB(MB_SELECT))
         return "MODES";
+    if (pick_on)
+        return "WAV";
     if (mb_held & MB(MB_L2))
         return "KEYS";
+    if (mb_held & MB(MB_R2))
+        return "SHIFT";
+    if ((mb_held & (MB(MB_L1) | MB(MB_R1))) == (MB(MB_L1) | MB(MB_R1)))
+        return "RANDOM";
     return "BASE";
 }
 /* the keys: 16 white, the black ones over their gaps; lit as the FM-1 lights them, yellow while held, the cursor
@@ -817,8 +1090,17 @@ static void draw_panel(void)
     text(x + 84, 13, 1, XRGB(120, 120, 130), "V" MYFAM_VERSION);
     draw_battery(x + 116, 6);
     fill(x + 8, 26, 144, 24, XRGB(40, 40, 52));
-    text(x + 14, 31, 2, XRGB(255, 255, 255), layer_name());
-    /* PLAY and the shifts: START, L1 (OCT-), R1 (OCT+), R2 (REC) */
+    if (export_wav) {                   /* a WAV being written: a red dot, the seconds so far */
+        snprintf(s, sizeof s, "WAV %.1fS", export_frames / (double)RATE);
+        fill(x + 8, 26, 144, 24, XRGB(70, 20, 24));
+        fill(x + 14, 32, 12, 12, XRGB(240, 50, 40));
+        text(x + 32, 31, 2, XRGB(255, 255, 255), s);
+    } else if (export_msg_ms && g_ms - export_msg_ms < 4000u) {   /* SAVED (and the file's name under the keys) */
+        fill(x + 8, 26, 144, 24, !strcmp(export_msg, "SAVED") ? XRGB(20, 70, 30) : XRGB(70, 20, 24));
+        text(x + 14, 31, 2, XRGB(255, 255, 255), export_msg);
+    } else
+        text(x + 14, 31, 2, XRGB(255, 255, 255), layer_name());
+    /* PLAY, octave controls and R2 SHIFT (same panel geometry) */
     {
         int pr = led_of(B_PLAY) > 40, pg = rf_panel.led_play_green > 40;
         y = 56;
@@ -829,13 +1111,16 @@ static void draw_panel(void)
         static const int8_t SH[3] = {B_OCTDN, B_OCTUP, B_REC};
         static const char *const SN[3] = {"L1", "R1", "R2"};
         for (int i = 0; i < 3; i++) {
-            uint8_t v = led_of(SH[i]);
-            int held = rf_panel.buttons >> RF_BTN_ID[SH[i]] & 1u;
+            static const uint8_t MBS[3] = {MB_L1, MB_R1, MB_R2};
+            uint8_t v = 0;
+            int held = !!(mb_held & MB(MBS[i]));
+            (void)SH;
             fill(x + 8 + i * 49, y, 46, 22, held ? XRGB(90, 90, 110) : XRGB(28, 28, 34));
-            fill(x + 10 + i * 49, y + 3, 4, 16, led_rgb(v, i == 2 ? XRGB(255, 60, 60) : XRGB(255, 200, 60)));
+            (void)v;
+            fill(x + 10 + i * 49, y + 3, 4, 16, held ? (i == 2 ? XRGB(180, 140, 255) : XRGB(255, 200, 60)) : XRGB(50, 50, 50));
             text(x + 18 + i * 49, y + 4, 2, XRGB(235, 235, 235), SN[i]);
         }
-        text(x + 8, y + 26, 1, XRGB(130, 130, 140), "  OCT-   OCT+    REC");
+        text(x + 8, y + 26, 1, XRGB(130, 130, 140), "  RANDOM (BOTH) SHIFT");
     }
     y = 124;
     if (mb_held & MB(MB_SELECT)) {      /* MODES: the map, with the lights */
@@ -846,6 +1131,19 @@ static void draw_panel(void)
         for (int i = 0; i < 9; i++)
             chip(x + 4, y - 2 + i * 24, M[i].c, M[i].t, M[i].b);
         text(x + 8, y + 216, 1, XRGB(170, 170, 180), "L2 / R2   PRESET - / +");
+    } else if ((mb_held & MB(MB_R2)) && !(mb_held & MB(MB_L2))) {   /* SHIFT: what R2 adds */
+        text(x + 8, y, 2, XRGB(200, 200, 210), "\x03\x04 PATTERN");
+        text(x + 8, y + 22, 2, XRGB(200, 200, 210), "\x01\x02 BANK");
+        text(x + 8, y + 44, 2, XRGB(200, 200, 210), "Y RANDOM");
+        text(x + 8, y + 66, 2, latched >= 0 ? XRGB(200, 200, 210) : XRGB(90, 90, 100), "B CLEAR");
+        text(x + 8, y + 84, 1, XRGB(130, 130, 140), "  (THE HELD STEP)");
+        text(x + 8, y + 100, 2, XRGB(200, 200, 210), "X WAV PATT");
+        text(x + 8, y + 122, 2, XRGB(200, 200, 210), "A WAV SONG");
+    } else if ((mb_held & (MB(MB_L1) | MB(MB_R1))) == (MB(MB_L1) | MB(MB_R1))) {   /* L1 + R1: the randoms */
+        text(x + 8, y, 2, XRGB(200, 200, 210), "A SOUND");
+        text(x + 8, y + 22, 2, XRGB(200, 200, 210), "B STEPS");
+        text(x + 8, y + 44, 2, XRGB(200, 200, 210), "Y PAGE");
+        text(x + 8, y + 66, 2, XRGB(200, 200, 210), "X ALL");
     } else if (mb_held & MB(MB_L2)) {   /* KEYS: the keyboard, big */
         if (latched >= 0)
             snprintf(s, sizeof s, "HOLD %d", latched + 1);
@@ -890,7 +1188,7 @@ static const char *const HELP[] = {
     "                   \x04\x01 +1/+4  \x03\x02 -1/-4",
     " D-PAD \x03\x04         ALGORITHM (CURSOR, TEMPO)",
     " D-PAD \x01\x02         SELECT (PAGE)",
-    " START PLAY   L1 OCT-   R1 OCT+   R2 REC",
+    " START PLAY   R2 SHIFT   L1 + R1 RANDOM",
     "",
     "SELECT + (MODES)",
     " \x01 SEQ  \x04 EDIT  \x02 KICK  \x03 LFO",
@@ -901,17 +1199,55 @@ static const char *const HELP[] = {
     " D-PAD MOVE THE CURSOR (\x01 BLACK, \x02 WHITE KEYS)",
     " A PLAY THE KEY   X TAP AND MOVE ON",
     " B HOLD THE KEY (KNOBS THEN EDIT THAT STEP)",
-    "",
-    "HOLD L1 OR R1 FIRST FOR THE OCT COMBOS",
+    "R2 + (SHIFT)",
+    " \x03\x04 PATTERN  \x01\x02 BANK  Y RANDOM  B CLEAR HELD STEP",
+    " X WAV PATTERN  A WAV SONG (YOU PICK THE FOLDER)",
+    "L1 + R1 + (RANDOM): A SOUND  B STEPS  Y PAGE  X ALL",
     "MENU + \x03\x04 VOLUME   MENU + \x01\x02 BRIGHTNESS",
     "SELECT + L1: SYS (CPU, RAM, THREADS, BATTERY)",
 };
+/* the folder picker: the title, the folder, its lines, what the buttons do */
+static void draw_pick(void)
+{
+    char t[80];
+    int up = strcmp(pick_dir, pick_root) != 0, n = pick_lines(), vis = 15;
+    fill(0, 0, SCR_W, SCR_H, XRGB(10, 10, 14));
+    text(12, 10, 2, XRGB(255, 140, 30), pick_song ? "EXPORT THE SONG AS WAV" : "EXPORT THE PATTERN AS WAV");
+    {   /* the folder: its end, if it is long */
+        size_t l = strlen(pick_dir);
+        snprintf(t, sizeof t, "%s%s", l > 50 ? "..." : "", l > 50 ? pick_dir + l - 47 : pick_dir);
+        text(12, 36, 2, XRGB(120, 220, 255), t);
+    }
+    for (int i = 0; i < vis && pick_top + i < n; i++) {
+        int k = pick_top + i, y = 66 + i * 24;
+        const char *name;
+        uint32_t col = XRGB(230, 230, 230);
+        if (k == 0)
+            name = "[ SAVE HERE ]", col = XRGB(120, 255, 140);
+        else if (k == 1)
+            name = "[ NEW FOLDER ]", col = XRGB(255, 230, 80);
+        else if (up && k == 2)
+            name = "..";
+        else
+            name = pick_name[k - 2 - up];
+        if (k == pick_sel)
+            fill(6, y - 3, SCR_W - 12, 22, XRGB(50, 50, 70));
+        snprintf(t, sizeof t, "%s%.48s", k >= 2 ? "/ " : "", name);
+        text(16, y, 2, col, t);
+    }
+    if (n > vis) {                      /* a scroll bar */
+        int h = 15 * 24 * vis / n, y = 63 + 15 * 24 * pick_top / n;
+        fill(SCR_W - 8, 63, 3, 15 * 24, XRGB(40, 40, 50));
+        fill(SCR_W - 8, y, 3, h, XRGB(150, 150, 160));
+    }
+    text(12, SCR_H - 22, 2, XRGB(255, 230, 80), "A OPEN  B BACK  START SAVE HERE  MENU X");
+}
 static void draw_help(void)
 {
     char s[64];
     fill(0, 0, SCR_W, SCR_H, XRGB(10, 10, 14));
     int y = 10;
-    for (size_t i = 0; i < sizeof HELP / sizeof HELP[0]; i++, y += 19)
+    for (size_t i = 0; i < sizeof HELP / sizeof HELP[0]; i++, y += 17)
         text(12, y, 2, i == 0 ? XRGB(255, 140, 30) : HELP[i][0] != ' ' ? XRGB(120, 220, 255) : XRGB(230, 230, 230), HELP[i]);
     snprintf(s, sizeof s, "MASTER %d%%", master_pct);
     text(12, SCR_H - 22, 2, XRGB(255, 230, 80), s);
@@ -929,6 +1265,11 @@ static uint32_t screen_sig(void)        /* what the picture depends on: redraw o
     h = (h ^ rf_panel.buttons) * 16777619u;
     h = (h ^ (uint32_t)(help_on << 24 | cur_row << 20 | cur_idx << 12 | (latched & 0xFF) << 4 | master_pct)) * 16777619u;
     h = (h ^ mb_held) * 16777619u;
+    h = (h ^ (uint32_t)(pick_on << 30 | pick_sel << 16 | pick_top << 4 | pick_n)) * 16777619u;
+    for (const char *q = pick_dir; *q; q++)
+        h = (h ^ (uint8_t)*q) * 16777619u;
+    h = (h ^ (export_wav ? export_frames / 4410u + 1u : 0u)) * 16777619u;
+    h = (h ^ (uint32_t)(export_msg_ms && g_ms - export_msg_ms < 4000u)) * 16777619u;
     h = (h ^ (uint32_t)(batt_pct << 1 | batt_charging)) * 16777619u;
     h = (h ^ (uint32_t)st_app_cpu) * 16777619u;
     h = (h ^ (uint32_t)st_sys_cpu) * 16777619u;
@@ -945,7 +1286,10 @@ static int draw(int force)              /* 1: the picture changed (the FM-1's sc
     if (!force && sig == drawn_sig)
         return 0;
     drawn_sig = sig;
-    if (help_on) {
+    if (pick_on) {
+        draw_pick();
+        drawn_lcd = ~0u;
+    } else if (help_on) {
         draw_help();
         drawn_lcd = ~0u;
     } else {
@@ -963,6 +1307,11 @@ static void fe_init(void)
     const char *e;
     if ((e = getenv("MYFAM_SAVE")) && *e)
         save_path = e;
+    {   /* my-fam.cfg: next to the save file */
+        const char *sl = strrchr(save_path, '/');
+        int n = sl ? (int)(sl - save_path) : 0;
+        snprintf(cfg_path, sizeof cfg_path, "%.*s%smy-fam.cfg", n, save_path, sl ? "/" : "");
+    }
     if ((e = getenv("MYFAM_AHEAD")) && atoi(e) >= 256)
         target_frames = (uint32_t)atoi(e) < AR / 2 ? (uint32_t)atoi(e) : AR / 2;
     font_init();
@@ -973,6 +1322,7 @@ static void fe_init(void)
 }
 static void fe_quit_save(void)
 {
+    export_close();
     rf_flash_sync();
     if (rf_flash_dirty() != saved_dirty || access(save_path, F_OK) != 0) {
         memcpy(save_buf, rf_image, sizeof save_buf);
@@ -1066,7 +1416,7 @@ int main(int argc, char **argv)
 {
     SDL_AudioSpec want, have;
     const char *e;
-    /* the picture: Allium's own SDL (/customer/lib) does not turn it, so My-FAM does (MYFAM_ROTATE=0: not) */
+    /* the picture: Allium's own SDL (/customer/lib) does not turn it, so MY-FAM does (MYFAM_ROTATE=0: not) */
     int rot = !((e = getenv("MYFAM_ROTATE")) && atoi(e) == 0);
     if (argc > 1)
         setenv("MYFAM_SAVE", argv[1], 1);
@@ -1087,7 +1437,7 @@ int main(int argc, char **argv)
         __asm__ volatile("vmsr fpscr, %0" : : "r"(fpscr));
     }
 #endif
-    fe_log("start My-FAM v" MYFAM_VERSION " by David Amo");
+    fe_log("start MY-FAM v" MYFAM_VERSION " by David Amo");
     signal(SIGTERM, on_signal);
     signal(SIGINT, on_signal);
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
@@ -1111,9 +1461,9 @@ int main(int argc, char **argv)
         g_video_w = video->w, g_video_h = video->h, g_video_bpp = video->format->BytesPerPixel * 8;
         fe_log(m);
     }
-    SDL_WM_SetCaption("My-FAM", "My-FAM");
+    SDL_WM_SetCaption("MY-FAM", "MY-FAM");
     fe_init();
-    fe_log("My-FAM ready");
+    fe_log("MY-FAM ready");
     pthread_t th;
     pthread_create(&th, 0, saver, 0);
     memset(&want, 0, sizeof want);
@@ -1350,6 +1700,12 @@ int main(int argc, char **argv)
                 got = master_pct;
             else if (!strcmp(a, "quit"))
                 got = quit_req;
+            else if (!strcmp(a, "pick"))
+                got = pick_on;
+            else if (!strcmp(a, "exporting"))
+                got = export_wav != 0;
+            else if (!strcmp(a, "wavtenths"))      /* the last WAV's length, in tenths of a second */
+                got = (int)(export_frames / 4410u);
             else if (!app_expect(a, &got)) {
                 printf("FAIL line %d: unknown expect %s\n", lineno, a);
                 fails++;
