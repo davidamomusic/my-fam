@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
-# The Allium app icon (miyoo/pak/icon.png, 1086x1086: the picture at its own resolution, Allium scales it): the start screen's picture (miyoo/art/splash.png) without its
+# The app icons: miyoo/pak/icon.png for Allium (1086x1086: the picture at its own resolution, Allium scales it) and
+# miyoo/pak/icon-74.png for OnionOS and the Miyoo firmware (their menu shows an icon as it is: 74x74, like theirs): the start screen's picture (miyoo/art/splash.png) without its
 # version number, the title centred, cut square. Run: python3 miyoo/make_icon.py   (needs Pillow)
 from pathlib import Path
 from PIL import Image, ImageDraw
@@ -22,4 +23,6 @@ for a, b in ((BLACK, CREAM), (BLACK, PINK), (CREAM, PINK)):
 pal = Image.new("P", (1, 1))
 pal.putpalette([v for c in cols + [BLACK] * (16 - len(cols)) for v in c])
 square.quantize(palette=pal, dither=Image.NONE).save(here / "pak" / "icon.png", optimize=True)
-print("icon.png: %dx%d" % square.size)
+small = square.resize((74, 74), Image.LANCZOS)
+small.save(here / "pak" / "icon-74.png", optimize=True)
+print("icon.png: %dx%d, icon-74.png: 74x74" % square.size)

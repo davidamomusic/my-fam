@@ -1,5 +1,8 @@
 #!/bin/sh
-# MY-FAM by David Amo: build for the Miyoo Mini Plus and package MY-FAM-vN.zip (Apps/MY-FAM.pak).
+# MY-FAM by David Amo: build for the Miyoo Mini Plus and package it for its three systems, one program:
+#   dist/MY-FAM-vN-Allium.zip   Apps/MY-FAM.pak   (Allium)
+#   dist/MY-FAM-vN-Onion.zip    App/MY-FAM        (OnionOS)
+#   dist/MY-FAM-vN-Stock.zip    App/MY-FAM        (the Miyoo firmware)
 #
 #   TOOLCHAIN=/path/to/gcc-linaro-arm-linux-gnueabihf-raspbian-x64 \
 #   SDL_INCLUDE=/path/to/include  SDL_LIB=/path/to/libSDL-1.2.so.0  miyoo/package.sh
@@ -34,19 +37,25 @@ if "$B-objdump" -T fam/build/miyoo/my-fam | grep -q 'GLIBC_2\.[5-9]\|GLIBC_2\.[1
     exit 1
 fi
 
-# the package
-D="$T/dist/Apps/MY-FAM.pak"
-mkdir -p "$D"
-cp fam/build/miyoo/my-fam "$D/my-fam.elf"
-"$B-strip" "$D/my-fam.elf"
-cp miyoo/pak/launch.sh miyoo/pak/config.json miyoo/pak/icon.png "$D/"
-cp README.md "$D/README.md"
-cp LICENSE "$D/LICENSE.txt"
-cp assets/fonts/Barlow-OFL.txt assets/fonts/Terminus-LICENSE.txt "$D/"
-chmod +x "$D/my-fam.elf" "$D/launch.sh"
-(cd "$D" && md5sum my-fam.elf > my-fam.md5)
+# the packages: the same program, launch.sh told which system it is on, the icon each menu wants
+"$B-strip" -o "$T/my-fam.elf" fam/build/miyoo/my-fam
 mkdir -p dist
-rm -f "dist/MY-FAM-v$V.zip"
-(cd "$T/dist" && zip -qr "$ROOT/dist/MY-FAM-v$V.zip" Apps)
+for OS in Allium Onion Stock; do
+    os=$(echo "$OS" | tr 'A-Z' 'a-z')
+    if [ "$OS" = Allium ]; then TOP=Apps; D="$T/$OS/Apps/MY-FAM.pak"; ICON=icon.png
+    else TOP=App; D="$T/$OS/App/MY-FAM"; ICON=icon-74.png; fi
+    mkdir -p "$D"
+    cp "$T/my-fam.elf" "$D/my-fam.elf"
+    sed "s/^MYFAM_OS=.*/MYFAM_OS=$os/" miyoo/pak/launch.sh > "$D/launch.sh"
+    cp miyoo/pak/config.json "$D/"
+    cp "miyoo/pak/$ICON" "$D/icon.png"
+    cp README.md "$D/README.md"
+    cp LICENSE "$D/LICENSE.txt"
+    cp assets/fonts/Barlow-OFL.txt assets/fonts/Terminus-LICENSE.txt "$D/"
+    chmod +x "$D/my-fam.elf" "$D/launch.sh"
+    (cd "$D" && md5sum my-fam.elf > my-fam.md5)
+    rm -f "dist/MY-FAM-v$V-$OS.zip"
+    (cd "$T/$OS" && zip -qr "$ROOT/dist/MY-FAM-v$V-$OS.zip" "$TOP")
+    echo "package: dist/MY-FAM-v$V-$OS.zip"
+done
 rm -rf "$T"
-echo "package: dist/MY-FAM-v$V.zip"

@@ -2,8 +2,8 @@
 
 **A drum synth and 16-step sequencer for the Miyoo Mini Plus, by David Amo.**
 
-MY-FAM is an app for the **Miyoo Mini Plus** handheld. Right now it is tested on **Allium OS** (Allium v1.0.2).
-Other systems for the console (OnionOS and others) are not supported yet.
+MY-FAM is an app for the **Miyoo Mini Plus** handheld, in three packages: **Allium**, **OnionOS** and the **Miyoo
+firmware** (stock). Tested on Allium (v1.0.2); the OnionOS and stock packages are new in v17.
 
 ![SEQ](docs/screens/seq.png) ![SYNTH](docs/screens/synth.png)
 ![KICK](docs/screens/kick.png) ![PATTERNS](docs/screens/patterns.png)
@@ -31,16 +31,22 @@ It opens with its start screen for 3 seconds (any button skips it; that press do
 
 ## Install
 
-1. Download MY-FAM from [Gumroad](https://davidamo.gumroad.com/l/my-fam) (pay what you want, also free)
-   or [`releases/MY-FAM-v17.zip`](releases/MY-FAM-v17.zip) here, and unzip it.
-2. Copy the folder `Apps/MY-FAM.pak` to `/mnt/SDCARD/Apps/` on the SD card.
-3. Start **MY-FAM** from Apps in Allium.
+Download MY-FAM from [Gumroad](https://davidamo.gumroad.com/l/my-fam) (pay what you want, also free) or from
+[`releases/`](releases/) here: the zip for your system.
+
+| System | Zip | Copy to the SD card | Start it from |
+| --- | --- | --- | --- |
+| Allium | `MY-FAM-v17-Allium.zip` | the folder `Apps/MY-FAM.pak` into `/mnt/SDCARD/Apps/` | Apps |
+| OnionOS | `MY-FAM-v17-Onion.zip` | the folder `App/MY-FAM` into `/mnt/SDCARD/App/` | Apps |
+| Miyoo firmware (stock) | `MY-FAM-v17-Stock.zip` | the folder `App/MY-FAM` into `/mnt/SDCARD/App/` | App |
+
+All three hold the same program; only the folder, the icon and a line of `launch.sh` differ.
 
 **Copying over the network (FTP, e.g. FileZilla): use binary mode.** Sent as text, the program arrives damaged and
 closes at once; `log.txt` then says `checksum WRONG`.
 
-Your patterns, sounds and projects are saved by themselves in `MY-FAM.pak/my-fam.flash`. The log of the last run is
-`MY-FAM.pak/log.txt`.
+Your patterns, sounds and projects are saved by themselves in `my-fam.flash`, in the app's folder. The log of the
+last run is `log.txt`, next to it.
 
 ## Screen
 
@@ -93,7 +99,7 @@ written). First a folder picker opens, starting in the folder used last time (or
   again (at most 16 bars).
 - While it renders (in real time, and you hear it) the side panel shows **WAV n.nS** in red; then **SAVED** in green.
   Do not quit meanwhile. It is a stereo mix, not separate synth / kick tracks.
-- The folder used is remembered in `MY-FAM.pak/my-fam.cfg`. `MYFAM_WAV_ROOT` in `settings.sh` changes where the
+- The folder used is remembered in `my-fam.cfg`, in the app's folder. `MYFAM_WAV_ROOT` in `settings.sh` changes where the
   picker starts and how far up it goes (default `/mnt/SDCARD`).
 
 ## Settings
@@ -119,7 +125,7 @@ cd OUTDIR && MYFAM_WAV_ROOT=. ~/my-fam/fam/build/miyoo/my-fam_test ~/my-fam/miyo
                                                             # v16_random_chords, v16_wav, v17_splash, v17_bpm;
                                                             # package.sh runs them all)
 
-TOOLCHAIN=... SDL_INCLUDE=... SDL_LIB=... miyoo/package.sh  # the app: dist/MY-FAM-vN.zip
+TOOLCHAIN=... SDL_INCLUDE=... SDL_LIB=... miyoo/package.sh  # dist/MY-FAM-vN-{Allium,Onion,Stock}.zip
 ```
 
 `miyoo/package.sh` says what each variable is: an `arm-linux-gnueabihf` GCC with an old glibc (the one in
