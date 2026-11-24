@@ -116,7 +116,7 @@ python3 tools/build.py fam --miyoo-test                     # the test runner, o
 cd OUTDIR && MYFAM_WAV_ROOT=. ~/my-fam/fam/build/miyoo/my-fam_test ~/my-fam/miyoo/tests/basic.txt .
                                                             # "0 failure(s)"; screenshots and WAVs in OUTDIR
                                                             # (miyoo/tests/*.txt: basic, v16_controls, v16_patterns,
-                                                            # v16_random_chords, v16_wav, v17_splash;
+                                                            # v16_random_chords, v16_wav, v17_splash, v17_bpm;
                                                             # package.sh runs them all)
 
 TOOLCHAIN=... SDL_INCLUDE=... SDL_LIB=... miyoo/package.sh  # the app: dist/MY-FAM-vN.zip

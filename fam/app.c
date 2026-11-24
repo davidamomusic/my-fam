@@ -2015,7 +2015,7 @@ static void bpm_add(int32_t e)
     sd.bpm = (uint16_t)clamp((int32_t)sd.bpm + e, 40, 240);
     tempo_set();
     touch();
-    ui.d_head = 1;
+    ui.d_head = ui.d_vis = ui.d_foot = 1;   /* the header, the TEMPO picture and the BPM cells all show it */
 }
 
 /* A choice (a wave, a filter type, a delay time, a slice) is kept as 0..127 and cut in n equal parts; a click moves to the

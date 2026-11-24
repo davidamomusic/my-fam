@@ -1,0 +1,18 @@
+# v17: on the TEMPO page (SEQ, page 3) LEFT / RIGHT change the BPM, and the footer's BPM cells follow
+down SELECT
+tap UP
+up SELECT
+tap DOWN
+tap DOWN
+expect page 2
+expect bpm 118
+tap RIGHT
+tap RIGHT
+tap RIGHT
+wait 100
+expect bpm 121
+shot bpm_121.png
+tap LEFT
+wait 100
+expect bpm 120
+shot bpm_120.png
