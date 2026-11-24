@@ -14,7 +14,7 @@ export SDL_AUDIODRIVER=dsp
 export HOME=/mnt/SDCARD
 export MYFAM_SAVE="$DIR/my-fam.flash"
 # settings.sh (optional): MYFAM_WAV_ROOT=/mnt/SDCARD/Music (where the WAV folder picker starts), MYFAM_ROTATE=0 (the picture not turned), MYFAM_AHEAD=6144 (more sound ahead, if it
-# crackles), MYFAM_FPS=20, MYFAM_STATS=0
+# crackles), MYFAM_FPS=20, MYFAM_STATS=0, MYFAM_SPLASH=0 (no start screen)
 [ -f "$DIR/settings.sh" ] && . "$DIR/settings.sh"
 
 echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null

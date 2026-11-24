@@ -33,6 +33,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include "font5x7.h"
+#include "splash.h"
 #include <dirent.h>
 #include <sys/stat.h>
 #include <strings.h>
@@ -980,6 +981,24 @@ static int text(int x, int y, int s, uint32_t c, const char *str)
     }
     return x;
 }
+/* the start screen (miyoo/art/splash.png), with this version written where the picture's own was */
+static void draw_splash(void)
+{
+    uint32_t *d = scr, *end = scr + SCR_W * SCR_H;
+    for (size_t i = 0; i < sizeof SPLASH_RLE && d < end; i++)
+        for (int n = (SPLASH_RLE[i] >> 4) + 1; n-- && d < end;)
+            *d++ = SPLASH_PAL[SPLASH_RLE[i] & 15];
+    /* bold and slanted, like the picture's lettering: 5x7 glyphs, cells 8 px, strokes 12 px wide */
+    int x = SPLASH_VER_X;
+    for (const char *c = "v" MYFAM_VERSION; *c; c++) {
+        uint8_t ch = (uint8_t)(*c >= 'a' && *c <= 'z' ? *c - 32 : *c);
+        for (int j = 0; j < 7; j++)
+            for (int i = 0; i < 5; i++)
+                if (glyphs[ch & 127][j] >> (4 - i) & 1)
+                    fill(x + i * 8 + (6 - j) * 2, SPLASH_VER_Y + j * 8, 12, 8, SPLASH_PAL[2]);
+        x += 6 * 8 - (*c == '1' ? 12 : 0);
+    }
+}
 static uint8_t led_of(int i)            /* plat's buttons 0..13, then keys */
 {
     uint8_t q = rf_led_pos[i];
@@ -1498,15 +1517,36 @@ int main(int argc, char **argv)
             pthread_detach(bt);
     }
     fe_log("running");
+    /* the start screen: 3 s, or until a button (that press only closes it); MYFAM_SPLASH=0: none */
+    uint32_t splash_end = (e = getenv("MYFAM_SPLASH")) && atoi(e) == 0 ? 0 : SDL_GetTicks() + 3000u;
+    uint32_t swallow = 0;
+    int splash_was = splash_end != 0;   /* after it: one whole redraw */               /* buttons pressed on the start screen: their release is ignored too */
+    if (splash_end) {
+        draw_splash();
+        blit(video, rot);
+    }
     while (!quit_req && !got_signal) {
         SDL_Event ev;
         uint64_t tp = now_us();
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT)
                 quit_req = 1;
-            else if (ev.type == SDL_KEYDOWN || ev.type == SDL_KEYUP)
-                mb_set(sdl_button(ev.key.keysym.sym), ev.type == SDL_KEYDOWN);
+            else if (ev.type == SDL_KEYDOWN || ev.type == SDL_KEYUP) {
+                int bt = sdl_button(ev.key.keysym.sym), dn = ev.type == SDL_KEYDOWN;
+                if (bt >= 0 && splash_end && dn) {
+                    swallow |= 1u << bt, splash_end = 0;
+                    continue;
+                }
+                if (bt >= 0 && (swallow >> bt & 1u)) {
+                    if (!dn)
+                        swallow &= ~(1u << bt);
+                    continue;
+                }
+                mb_set(bt, dn);
+            }
         }
+        if (splash_end && (int32_t)(SDL_GetTicks() - splash_end) >= 0)
+            splash_end = 0;
         pr_us[PR_POLL] += now_us() - tp;
         /* the simulator ahead of the sound card; without sound, by the wall clock */
         uint32_t now = SDL_GetTicks(), budget = 60;
@@ -1521,9 +1561,11 @@ int main(int argc, char **argv)
         }
         save_check();
         stats_tick();
-        if (now - last_draw >= frame_ms) {
+        if (!splash_end && now - last_draw >= frame_ms) {
             last_draw = now;
-            if (draw(0)) {
+            int full = splash_was;
+            splash_was = 0;
+            if (draw(full)) {
                 uint64_t t0 = now_us();
                 blit(video, rot);
                 pr_us[PR_SCREEN] += now_us() - t0;
@@ -1554,7 +1596,7 @@ int main(int argc, char **argv)
 #else
 /* ============================================================ the test runner === */
 /* fmfam_test SCRIPT OUTDIR: lines of
- *   wait MS | down BTN | up BTN | tap BTN [MS] | shot FILE.png | wav FILE.wav | wavend | save | expect help 0|1
+ *   wait MS | down BTN | up BTN | tap BTN [MS] | shot FILE.png | splashshot FILE.png | wav FILE.wav | wavend | save | expect help 0|1
  * BTN: UP DOWN LEFT RIGHT A B X Y L1 R1 L2 R2 SELECT START MENU */
 #include <zlib.h>
 static FILE *wav;
@@ -1679,6 +1721,11 @@ int main(int argc, char **argv)
             snprintf(path, sizeof path, "%s/%s", outdir, b);
             draw(1);
             png_out(path);
+        } else if (!strcmp(a, "splashshot")) {
+            snprintf(path, sizeof path, "%s/%s", outdir, b);
+            draw_splash();
+            png_out(path);
+            draw(1);
         } else if (!strcmp(a, "wav")) {
             snprintf(path, sizeof path, "%s/%s", outdir, b);
             if ((wav = fopen(path, "wb+")))

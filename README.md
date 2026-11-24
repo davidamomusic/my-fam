@@ -13,7 +13,7 @@ Other systems for the console (OnionOS and others) are not supported yet.
 Promo video: [YouTube](https://youtu.be/aYvvfblMpzU) · [16:9 file](docs/promo/MY-FAM_promo_youtube_16x9.mp4) · [Instagram reel 9:16](docs/promo/MY-FAM_promo_reel_9x16.mp4)
 
 > [!WARNING]
-> Beta software (MY-FAM v16). Provided "as is", without warranty of any kind (MPL-2.0, sections 6 and 7).
+> Beta software (MY-FAM v17). Provided "as is", without warranty of any kind (MPL-2.0, sections 6 and 7).
 > Keep a copy of `my-fam.flash` if your patterns matter to you.
 
 ## What it does
@@ -27,10 +27,12 @@ Promo video: [YouTube](https://youtu.be/aYvvfblMpzU) · [16:9 file](docs/promo/M
 - **SCL**: 16 scales; random pages; presets and projects (**SAVE**).
 - **SYS**: the app's and the system's CPU and memory, the threads, the sound, the battery.
 
+It opens with its start screen for 3 seconds (any button skips it; that press does nothing else).
+
 ## Install
 
 1. Download MY-FAM from [Gumroad](https://davidamo.gumroad.com/l/my-fam) (pay what you want, also free)
-   or [`releases/MY-FAM-v16.zip`](releases/MY-FAM-v16.zip) here, and unzip it.
+   or [`releases/MY-FAM-v17.zip`](releases/MY-FAM-v17.zip) here, and unzip it.
 2. Copy the folder `Apps/MY-FAM.pak` to `/mnt/SDCARD/Apps/` on the SD card.
 3. Start **MY-FAM** from Apps in Allium.
 
@@ -104,6 +106,7 @@ export MYFAM_AHEAD=6144   # sound crackles? more sound ahead (more latency)
 export MYFAM_FPS=20       # fewer screen frames a second
 export MYFAM_STATS=0      # no CPU / RAM readings
 export MYFAM_WAV_ROOT=/mnt/SDCARD/Music   # where the WAV folder picker starts
+export MYFAM_SPLASH=0     # no start screen
 ```
 
 ## Build
@@ -113,7 +116,8 @@ python3 tools/build.py fam --miyoo-test                     # the test runner, o
 cd OUTDIR && MYFAM_WAV_ROOT=. ~/my-fam/fam/build/miyoo/my-fam_test ~/my-fam/miyoo/tests/basic.txt .
                                                             # "0 failure(s)"; screenshots and WAVs in OUTDIR
                                                             # (miyoo/tests/*.txt: basic, v16_controls, v16_patterns,
-                                                            # v16_random_chords, v16_wav; package.sh runs them all)
+                                                            # v16_random_chords, v16_wav, v17_splash;
+                                                            # package.sh runs them all)
 
 TOOLCHAIN=... SDL_INCLUDE=... SDL_LIB=... miyoo/package.sh  # the app: dist/MY-FAM-vN.zip
 ```

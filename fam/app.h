@@ -7,7 +7,7 @@
 
 #ifdef MYFAM                             /* the Miyoo build: MY-FAM by David Amo, one number per version */
 #define APP_NAME "MY-FAM"
-#define MYFAM_VERSION "16"
+#define MYFAM_VERSION "17"
 #else
 #define APP_NAME "MY-FAM"
 #endif

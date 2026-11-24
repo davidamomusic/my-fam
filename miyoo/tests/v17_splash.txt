@@ -1,0 +1,5 @@
+# v17: the start screen (in the test runner it is only drawn on request), then the app as usual
+splashshot splash.png
+tap A
+shot after_splash.png
+expect help 0
