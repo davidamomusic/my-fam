@@ -3,7 +3,7 @@
 **A drum synth and 16-step sequencer for the Miyoo Mini Plus, by David Amo.**
 
 MY-FAM is an app for the **Miyoo Mini Plus** handheld, in three packages: **Allium**, **OnionOS** and the **Miyoo
-firmware** (stock). Tested on Allium (v1.0.2); the OnionOS and stock packages are new in v17.
+firmware** (stock). Tested on all three.
 
 ![SEQ](docs/screens/seq.png) ![SYNTH](docs/screens/synth.png)
 ![KICK](docs/screens/kick.png) ![PATTERNS](docs/screens/patterns.png)
