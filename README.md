@@ -13,7 +13,7 @@ firmware** (stock). Tested on all three.
 Promo video: [YouTube](https://youtu.be/aYvvfblMpzU) · [16:9 file](docs/promo/MY-FAM_promo_youtube_16x9.mp4) · [Instagram reel 9:16](docs/promo/MY-FAM_promo_reel_9x16.mp4)
 
 > [!WARNING]
-> Beta software (MY-FAM v17). Provided "as is", without warranty of any kind (MPL-2.0, sections 6 and 7).
+> Beta software (MY-FAM v18). Provided "as is", without warranty of any kind (MPL-2.0, sections 6 and 7).
 > Keep a copy of `my-fam.flash` if your patterns matter to you.
 
 ## What it does
@@ -31,16 +31,15 @@ It opens with its start screen for 3 seconds (any button skips it; that press do
 
 ## Install
 
-Download MY-FAM from [Gumroad](https://davidamo.gumroad.com/l/my-fam) (pay what you want, also free) or from
-[`releases/`](releases/) here: the zip for your system.
+Download `MY-FAM-v18.zip` from [Gumroad](https://davidamo.gumroad.com/l/my-fam) (pay what you want, also free) or
+from [`releases/`](releases/) here. One zip for the three systems:
 
-| System | Zip | Copy to the SD card | Start it from |
-| --- | --- | --- | --- |
-| Allium | `MY-FAM-v17-Allium.zip` | the folder `Apps/MY-FAM.pak` into `/mnt/SDCARD/Apps/` | Apps |
-| OnionOS | `MY-FAM-v17-Onion.zip` | the folder `App/MY-FAM` into `/mnt/SDCARD/App/` | Apps |
-| Miyoo firmware (stock) | `MY-FAM-v17-Stock.zip` | the folder `App/MY-FAM` into `/mnt/SDCARD/App/` | App |
+1. Unzip it and copy everything in it (the folders `Apps` and `App`) to the root of the SD card.
+2. Start **MY-FAM** from Apps (Allium, OnionOS) or App (Miyoo firmware).
 
-All three hold the same program; only the folder, the icon and a line of `launch.sh` differ.
+Each system reads its own folder and leaves the other alone: Allium uses `Apps/MY-FAM.pak`, OnionOS and the Miyoo
+firmware use `App/MY-FAM`. (To keep only yours, copy just that folder.) Both hold the same program and the same
+`launch.sh`, which tells the system apart by itself; only the icon differs.
 
 **Copying over the network (FTP, e.g. FileZilla): use binary mode.** Sent as text, the program arrives damaged and
 closes at once; `log.txt` then says `checksum WRONG`.
@@ -125,7 +124,7 @@ cd OUTDIR && MYFAM_WAV_ROOT=. ~/my-fam/fam/build/miyoo/my-fam_test ~/my-fam/miyo
                                                             # v16_random_chords, v16_wav, v17_splash, v17_bpm;
                                                             # package.sh runs them all)
 
-TOOLCHAIN=... SDL_INCLUDE=... SDL_LIB=... miyoo/package.sh  # dist/MY-FAM-vN-{Allium,Onion,Stock}.zip
+TOOLCHAIN=... SDL_INCLUDE=... SDL_LIB=... miyoo/package.sh  # dist/MY-FAM-vN.zip (Apps/MY-FAM.pak and App/MY-FAM)
 ```
 
 `miyoo/package.sh` says what each variable is: an `arm-linux-gnueabihf` GCC with an old glibc (the one in

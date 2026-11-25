@@ -1,8 +1,8 @@
 #!/bin/sh
-# MY-FAM by David Amo: build for the Miyoo Mini Plus and package it for its three systems, one program:
-#   dist/MY-FAM-vN-Allium.zip   Apps/MY-FAM.pak   (Allium)
-#   dist/MY-FAM-vN-Onion.zip    App/MY-FAM        (OnionOS)
-#   dist/MY-FAM-vN-Stock.zip    App/MY-FAM        (the Miyoo firmware)
+# MY-FAM by David Amo: build for the Miyoo Mini Plus and package dist/MY-FAM-vN.zip, one zip for its three systems:
+#   Apps/MY-FAM.pak   Allium (its big icon: Allium scales it)
+#   App/MY-FAM        OnionOS and the Miyoo firmware (a 74x74 icon: they show it as it is)
+# The same program and the same launch.sh in both (it tells the system apart by itself); each system reads its folder.
 #
 #   TOOLCHAIN=/path/to/gcc-linaro-arm-linux-gnueabihf-raspbian-x64 \
 #   SDL_INCLUDE=/path/to/include  SDL_LIB=/path/to/libSDL-1.2.so.0  miyoo/package.sh
@@ -37,25 +37,21 @@ if "$B-objdump" -T fam/build/miyoo/my-fam | grep -q 'GLIBC_2\.[5-9]\|GLIBC_2\.[1
     exit 1
 fi
 
-# the packages: the same program, launch.sh told which system it is on, the icon each menu wants
+# the package: both folders, the same program and launch.sh, the icon each menu wants
 "$B-strip" -o "$T/my-fam.elf" fam/build/miyoo/my-fam
-mkdir -p dist
-for OS in Allium Onion Stock; do
-    os=$(echo "$OS" | tr 'A-Z' 'a-z')
-    if [ "$OS" = Allium ]; then TOP=Apps; D="$T/$OS/Apps/MY-FAM.pak"; ICON=icon.png
-    else TOP=App; D="$T/$OS/App/MY-FAM"; ICON=icon-74.png; fi
+for D in "$T/pkg/Apps/MY-FAM.pak" "$T/pkg/App/MY-FAM"; do
     mkdir -p "$D"
     cp "$T/my-fam.elf" "$D/my-fam.elf"
-    sed "s/^MYFAM_OS=.*/MYFAM_OS=$os/" miyoo/pak/launch.sh > "$D/launch.sh"
-    cp miyoo/pak/config.json "$D/"
-    cp "miyoo/pak/$ICON" "$D/icon.png"
+    cp miyoo/pak/launch.sh miyoo/pak/config.json "$D/"
+    case "$D" in */Apps/*) cp miyoo/pak/icon.png "$D/icon.png" ;; *) cp miyoo/pak/icon-74.png "$D/icon.png" ;; esac
     cp README.md "$D/README.md"
     cp LICENSE "$D/LICENSE.txt"
     cp assets/fonts/Barlow-OFL.txt assets/fonts/Terminus-LICENSE.txt "$D/"
     chmod +x "$D/my-fam.elf" "$D/launch.sh"
     (cd "$D" && md5sum my-fam.elf > my-fam.md5)
-    rm -f "dist/MY-FAM-v$V-$OS.zip"
-    (cd "$T/$OS" && zip -qr "$ROOT/dist/MY-FAM-v$V-$OS.zip" "$TOP")
-    echo "package: dist/MY-FAM-v$V-$OS.zip"
 done
+mkdir -p dist
+rm -f "dist/MY-FAM-v$V.zip"
+(cd "$T/pkg" && zip -qr "$ROOT/dist/MY-FAM-v$V.zip" Apps App)
+echo "package: dist/MY-FAM-v$V.zip"
 rm -rf "$T"

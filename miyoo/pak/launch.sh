@@ -1,7 +1,9 @@
 #!/bin/sh
-# MY-FAM by David Amo, for the Miyoo Mini Plus: the same launch.sh on Allium (Apps/MY-FAM.pak), OnionOS and the
-# Miyoo firmware (App/MY-FAM). package.sh writes which one this copy is for on the next line.
-MYFAM_OS=allium
+# MY-FAM by David Amo, for the Miyoo Mini Plus: the same launch.sh in Apps/MY-FAM.pak (Allium) and App/MY-FAM
+# (OnionOS, Miyoo firmware). Which system it runs on, from what is on the SD card (Allium also has .tmp_update):
+if [ -d /mnt/SDCARD/.allium ]; then MYFAM_OS=allium
+elif [ -e /mnt/SDCARD/.tmp_update/onionVersion ]; then MYFAM_OS=onion
+else MYFAM_OS=stock; fi
 # (the program is my-fam.elf: an extension, so FTP clients send it as binary, not as text)
 cd "$(dirname "$0")"
 DIR=$(pwd)
